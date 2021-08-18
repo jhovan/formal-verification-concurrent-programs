@@ -51,6 +51,10 @@ pciList :: [Lprog s] -> [VarId]
 pciList labProgList = [pcId | Lprog (_, _, ProgPC (pcId,_), _) <- labProgList]
 --
 
+progPcList :: [Lprog s] -> [ProgPC]
+progPcList labProgList = [pc | Lprog (_, _, pc, _) <- labProgList]
+
+
 initialStatesOf :: LconcProg s -> SimpleExpr
 -- Given a labeled concurrent program 
 --      P^L:= (l1, cobegin (l1,P1^L,l1') || (l2,P2^L,l2') || ... || (ln,Pn^L,ln') coend, ln'),
@@ -94,7 +98,7 @@ concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,pcT), i, labProcList, p
     moduleElemList  = [pcDecl, pVarDecl, pInitConstr, pTransConstr]
     pVarDecl        = impVarDeclToXmvVarDecl (progVarListUnion [(lVarDecl)| Lprog (_, lVarDecl, _, _) <- labProcList])
 --     (entryLab,_)    = labelsOfLabStm labStm
-    pcDecl          = VarDecl (union [(pcId, impTypeToXmvType pcT)] [(pci, impTypeToXmvType pcT)|pci <- pciList labProcList]) 
+    pcDecl          = VarDecl (union [(pcId, impTypeToXmvType pcT)] [(pci, impTypeToXmvType pcTi)|ProgPC (pci,pcTi) <- progPcList labProcList]) 
     pInitConstr     = InitConstr  (initialStatesOf concP)  -- INIT pc=entryLab
     pTransConstr    = TransConstr (labConcProgConstraint i pcId labProcList)
 --     pTransConstr    = TransConstr (labStmToXmvConstraint pcId lVarDecl labStm)
@@ -135,11 +139,14 @@ f1Aux l =
                                                                     (f1Aux xs)
 
 labConcProgConstraint :: EntryLabel -> VarId -> [LimpProg] -> NextExpr
-labConcProgConstraint i pcId labProcList  = ((NEvar pcId) `NEeq` (NEint i)) 
-                                            `NEand` 
-                                            (f1Aux labProcList)
-                                            `NEand` 
-                                            ((NEnext (SEvar pcId)) `NEeq` (NEint 0))  
+labConcProgConstraint i pcId labProcList  = f1 `NEor` f2 
+    where
+    f1 = ((NEvar pcId) `NEeq` (NEint i)) 
+        `NEand` 
+        (f1Aux labProcList)
+        `NEand` 
+        ((NEnext (SEvar pcId)) `NEeq` (NEint 0))  
+    f2 = ((NEvar pcId) `NEeq` (NEint 0)) 
                                             
 
 
