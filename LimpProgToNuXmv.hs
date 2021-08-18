@@ -1,4 +1,4 @@
-module LimpProgToNuXmv (lImpProgToNuXmv, impTypeToXmvType)
+module LimpProgToNuXmv (lImpProgToNuXmv, impTypeToXmvType, impVarDeclToXmvVarDecl)
 -------------------------------------------------------------------------------
 -- Transform a labeled Imp program to a NuXmv model
 -- Author: Miguel Carrillo Barajas.

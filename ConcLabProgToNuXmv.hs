@@ -34,10 +34,13 @@ import LimpSimpStmToNuXmv
     (impSimpStmToNextExpr
     ,keepVars) -- ,curr,next,pcX
 import ImpLabProgSyntax (ProgPC(..), Lprog(..))
-import LimpProgToNuXmv (impTypeToXmvType) -- lImpProgToNuXmv
+import LimpProgToNuXmv (impTypeToXmvType, impVarDeclToXmvVarDecl) -- lImpProgToNuXmv
 --
 import ConcLabProgSyntax
 import Data.List 
+
+import ImpProgSyntax
+    (Prog(..),ImpProg,ProgVarList(..),ImpVarType(..))
 --
 -------------------------------------------------------------------------------
 --
@@ -88,8 +91,8 @@ concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,pcT), i, labProcList, p
     pModule         = (pName,moduleParams,moduleElemList) 
     moduleParams    = [] -- Falta agregar a la sintaxis de Imp-programs: parametros del programa XXX
 --     moduleElemList  = [pVarDecl, pcDecl, pInitConstr, pTransConstr]
-    moduleElemList  = [pcDecl, pInitConstr]
---     pVarDecl        = impVarDeclToXmvVarDecl lVarDecl
+    moduleElemList  = [pcDecl, pVarDecl, pInitConstr]
+    pVarDecl        = impVarDeclToXmvVarDecl (progVarListUnion [(lVarDecl)| Lprog (_, lVarDecl, _, _) <- labProcList])
 --     (entryLab,_)    = labelsOfLabStm labStm
     pcDecl          = VarDecl (union [(pcId, impTypeToXmvType pcT)] [(pci, impTypeToXmvType pcT)|pci <- pciList labProcList]) 
     pInitConstr     = InitConstr  (initialStatesOf concP)  -- INIT pc=entryLab
@@ -107,7 +110,17 @@ concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,pcT), i, labProcList, p
     -- ltlModule    = ...
     --
 --
-        
+
+
+-- union of ProgVarList List
+progVarListUnionAux :: [ProgVarList] -> [(VarId,ImpVarType)] 
+progVarListUnionAux l = 
+    case l of
+        [] -> []
+        (ProgVarList varList):xs -> union varList (progVarListUnionAux xs)
+
+progVarListUnion :: [ProgVarList] -> ProgVarList
+progVarListUnion l = ProgVarList (progVarListUnionAux l)
 
 
 
