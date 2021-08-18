@@ -12,7 +12,7 @@ where
 --
 -------------------------------------------------------------------------------
 --
-import GlobalTypes (VarId)
+import GlobalTypes (VarId, EntryLabel)
 --     (EntryLabel, ExitLabel) --(VarMN) -- Value(..)
 --import GlobalFunctions ()
 --import ImpExpSyntax (ExpAB(..), ArthE(..), BoolE(..))
@@ -33,7 +33,7 @@ import ImpLabStmSyntax
 import LimpSimpStmToNuXmv
     (impSimpStmToNextExpr
     ,keepVars) -- ,curr,next,pcX
-import ImpLabProgSyntax (ProgPC(..), Lprog(..))
+import ImpLabProgSyntax (ProgPC(..), Lprog(..), LimpProg(..))
 import LimpProgToNuXmv (impTypeToXmvType, impVarDeclToXmvVarDecl) -- lImpProgToNuXmv
 --
 import ConcLabProgSyntax
@@ -91,11 +91,12 @@ concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,pcT), i, labProcList, p
     pModule         = (pName,moduleParams,moduleElemList) 
     moduleParams    = [] -- Falta agregar a la sintaxis de Imp-programs: parametros del programa XXX
 --     moduleElemList  = [pVarDecl, pcDecl, pInitConstr, pTransConstr]
-    moduleElemList  = [pcDecl, pVarDecl, pInitConstr]
+    moduleElemList  = [pcDecl, pVarDecl, pInitConstr, pTransConstr]
     pVarDecl        = impVarDeclToXmvVarDecl (progVarListUnion [(lVarDecl)| Lprog (_, lVarDecl, _, _) <- labProcList])
 --     (entryLab,_)    = labelsOfLabStm labStm
     pcDecl          = VarDecl (union [(pcId, impTypeToXmvType pcT)] [(pci, impTypeToXmvType pcT)|pci <- pciList labProcList]) 
     pInitConstr     = InitConstr  (initialStatesOf concP)  -- INIT pc=entryLab
+    pTransConstr    = TransConstr (labConcProgConstraint i pcId labProcList)
 --     pTransConstr    = TransConstr (labStmToXmvConstraint pcId lVarDecl labStm)
     -- Module main (moduleName,moduleParameters,moduleElemList):
     mainModule      = (mainName,mainParams,mainElemList) -- XXXX
@@ -123,7 +124,23 @@ progVarListUnion :: [ProgVarList] -> ProgVarList
 progVarListUnion l = ProgVarList (progVarListUnionAux l)
 
 
+-- constrains
 
+f1Aux :: [LimpProg] -> NextExpr
+f1Aux l =
+    case l of
+        [] -> NEtrue
+        (Lprog (_, _, ProgPC (pcId,_), LseqCompos (i,(_,_),_))):xs -> ((NEnext (SEvar pcId)) `NEeq` (NEint i)) 
+                                                                   `NEand` 
+                                                                    (f1Aux xs)
+
+labConcProgConstraint :: EntryLabel -> VarId -> [LimpProg] -> NextExpr
+labConcProgConstraint i pcId labProcList  = ((NEvar pcId) `NEeq` (NEint i)) 
+                                            `NEand` 
+                                            (f1Aux labProcList)
+                                            `NEand` 
+                                            ((NEnext (SEvar pcId)) `NEeq` (NEint 0))  
+                                            
 
 
 --
