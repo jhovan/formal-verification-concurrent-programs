@@ -257,6 +257,12 @@ labConcProg1 = concProgToLabConcProg 1 pc concProg1
 xmvConcProg1 :: NuSMVmodel
 xmvConcProg1 =  concLabProgToNuXmv labConcProg1
 --
+concProg1TOFile :: IO ()
+concProg1TOFile = writeFile "concProg1.txt" $ show concProg1
+
+labConcProg1TOFile :: IO ()
+labConcProg1TOFile = writeFile "concProg1Lab.txt" $ show labConcProg1
+
 concProg1TOxmvFile :: IO ()
 concProg1TOxmvFile = writeFile "concProg1.xmv" (nuSmvModelTOstring xmvConcProg1)
 --

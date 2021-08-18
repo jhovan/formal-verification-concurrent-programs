@@ -1,0 +1,19 @@
+concProg1 = {
+             Var
+                pc: 0..2;
+(1,0):       cobegin Process1 || Process2 coend}
+             where
+(1,0):       Process1 = {
+                Var
+                    x: 0..9;
+                    pc1: 0..2;
+(1,2):           x := 1;
+(2,0):           x := 2;
+(0,0):           idle}
+(1,0):       Process2 = {
+                Var
+                    y: 0..9;
+                    pc2: 0..2;
+(1,2):           y := 1;
+(2,0):           y := 2;
+(0,0):           idle}
