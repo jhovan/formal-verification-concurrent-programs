@@ -37,6 +37,7 @@ import ImpLabProgSyntax (ProgPC(..), Lprog(..))
 import LimpProgToNuXmv (impTypeToXmvType) -- lImpProgToNuXmv
 --
 import ConcLabProgSyntax
+import Data.List 
 --
 -------------------------------------------------------------------------------
 --
@@ -80,7 +81,7 @@ initialStatesOf (LconcProg (_, ProgPC (pcId,_), entryL, labProcList, _)) =
 concLabProgToNuXmv :: LconcImpProg -> NuSMVmodel
 -- Transform a Labeled concurrent program to nuXmv model.
 --concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,_), entryL, labProcList, exitL)) = []
-concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,pcT), _, _, _)) =
+concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,pcT), i, labProcList, pcIdleValue)) =
     [pModule, mainModule] -- [pModule, mainModule, ltlModule]
     where
     -- Module for program p (moduleName,moduleParameters,moduleElemList):
@@ -90,7 +91,7 @@ concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,pcT), _, _, _)) =
     moduleElemList  = [pcDecl, pInitConstr]
 --     pVarDecl        = impVarDeclToXmvVarDecl lVarDecl
 --     (entryLab,_)    = labelsOfLabStm labStm
-    pcDecl          = VarDecl     [(pcId, impTypeToXmvType pcT)]
+    pcDecl          = VarDecl (union [(pcId, impTypeToXmvType pcT)] [(pci, impTypeToXmvType pcT)|pci <- pciList labProcList]) 
     pInitConstr     = InitConstr  (initialStatesOf concP)  -- INIT pc=entryLab
 --     pTransConstr    = TransConstr (labStmToXmvConstraint pcId lVarDecl labStm)
     -- Module main (moduleName,moduleParameters,moduleElemList):
