@@ -12,7 +12,7 @@ where
 --
 -------------------------------------------------------------------------------
 --
-import GlobalTypes (VarId, EntryLabel)
+import GlobalTypes (VarId, EntryLabel, ExitLabel)
 --     (EntryLabel, ExitLabel) --(VarMN) -- Value(..)
 --import GlobalFunctions ()
 --import ImpExpSyntax (ExpAB(..), ArthE(..), BoolE(..))
@@ -104,7 +104,7 @@ concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,pcT), i, labProcList, p
 --     (entryLab,_)    = labelsOfLabStm labStm
     pcDecl          = VarDecl (union [(pcId, impTypeToXmvType pcT)] [(pci, impTypeToXmvType pcTi)|ProgPC (pci,pcTi) <- progPcList labProcList]) 
     pInitConstr     = InitConstr  (initialStatesOf concP)  -- INIT pc=entryLab
-    pTransConstr    = TransConstr (labConcProgConstraint i pcId labProcList)
+    pTransConstr    = TransConstr (labConcProgConstraint i pcId labProcList pcIdleValue)
 --     pTransConstr    = TransConstr (labStmToXmvConstraint pcId lVarDecl labStm)
     -- Module main (moduleName,moduleParameters,moduleElemList):
     mainModule      = (mainName,mainParams,mainElemList) -- XXXX
@@ -152,7 +152,7 @@ f2Aux1 :: [LimpProg] -> NextExpr
 f2Aux1 l =
     case l of
         [] -> NEtrue
-        (Lprog (_, _, ProgPC (pcId,_), _)):xs -> ((NEvar pcId) `NEeq` (NEint 0)) 
+        (Lprog (_, _, ProgPC (pcId,_), LseqCompos (_, _, l'))):xs -> ((NEvar pcId) `NEeq` (NEint l')) 
                                                 `NEand` 
                                                 (f2Aux1 xs)
 
@@ -176,21 +176,25 @@ f3Aux l variables pcs =
                                                             )
                                                             `NEor` 
                                                             (f3Aux xs variables pcs)
-labConcProgConstraint :: EntryLabel -> VarId -> [LimpProg] -> NextExpr
-labConcProgConstraint i pcId labProcList  = f1 `NEor` f2 `NEor` f3 
+
+labConcProgConstraint :: EntryLabel -> VarId -> [LimpProg] -> ExitLabel -> NextExpr
+labConcProgConstraint l pcId labProcList l' = f1 `NEor` f2 `NEor` f3 
     where
-    f1 = ((NEvar pcId) `NEeq` (NEint i)) 
+    -- pc = l ^ pc1' = l1 ^ .. ^ pcn'=ln ^ pc' = Bottom
+    f1 = ((NEvar pcId) `NEeq` (NEint l)) 
         `NEand` 
         (f1Aux labProcList)
         `NEand` 
         ((NEnext (SEvar pcId)) `NEeq` (NEint 0))  
+    -- pc = Bottom ^ pc1 = l1' ^ .. ^ pcn=ln' ^ pc' = l' ^ (conjuncion de pci'= Bottom para todo i)
     f2 = ((NEvar pcId) `NEeq` (NEint 0)) 
         `NEand` 
         (f2Aux1 labProcList)
         `NEand` 
-        ((NEnext (SEvar pcId)) `NEeq` (NEint 0)) 
+        ((NEnext (SEvar pcId)) `NEeq` (NEint l')) 
         `NEand` 
         (f2Aux2 labProcList)
+    -- Disyuncion de (C(li,pi,li') ^ same (V\Vi) ^ same (PC\{pci})) para todos los i
     f3 = (f3Aux labProcList (varIdListFromProgVarList (progVarListUnion [(lVarDecl)| Lprog (_, lVarDecl, _, _) <- labProcList])) (pciList labProcList))
 
                                             
