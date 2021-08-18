@@ -138,6 +138,22 @@ f1Aux l =
                                                                    `NEand` 
                                                                     (f1Aux xs)
 
+f2Aux1 :: [LimpProg] -> NextExpr
+f2Aux1 l =
+    case l of
+        [] -> NEtrue
+        (Lprog (_, _, ProgPC (pcId,_), _)):xs -> ((NEvar pcId) `NEeq` (NEint 0)) 
+                                                `NEand` 
+                                                (f2Aux1 xs)
+
+f2Aux2 :: [LimpProg] -> NextExpr
+f2Aux2 l =
+    case l of
+        [] -> NEtrue
+        (Lprog (_, _, ProgPC (pcId,_), _)):xs -> ((NEnext (SEvar pcId)) `NEeq` (NEint 0)) 
+                                                `NEand` 
+                                                (f2Aux2 xs)
+
 labConcProgConstraint :: EntryLabel -> VarId -> [LimpProg] -> NextExpr
 labConcProgConstraint i pcId labProcList  = f1 `NEor` f2 
     where
@@ -147,103 +163,13 @@ labConcProgConstraint i pcId labProcList  = f1 `NEor` f2
         `NEand` 
         ((NEnext (SEvar pcId)) `NEeq` (NEint 0))  
     f2 = ((NEvar pcId) `NEeq` (NEint 0)) 
+        `NEand` 
+        (f2Aux1 labProcList)
+        `NEand` 
+        ((NEnext (SEvar pcId)) `NEeq` (NEint 0)) 
+        `NEand` 
+        (f2Aux2 labProcList)
+
                                             
 
 
---
--- labSeqStmListToNextExpr :: SmvId->[SmvId]->(EntryLabel, [LimpStm], ExitLabel) -> NextExpr
--- -- Clarke, Model Checking, pp. 21-22.
--- labSeqStmListToNextExpr pc vXlist (entryLab, labImpStmList, exitLab) = 
---     case labImpStmList of
---         (labC1:labC2:labImpStmList')
---             ->  labC1nextExpr `NEor` labStmListNextExpr --NEtrue -- XXX
---                 where
---                 labC1nextExpr       = impCompStmToNextExpr pc vXlist labC1
---                 exitLabC1           = exitLabelOf labC1
---                 labStmListNextExpr  = labSeqStmListToNextExpr pc vXlist 
---                                         (exitLabC1,(labC2:labImpStmList'),exitLab)
---         [labImpStm] 
---             ->  impCompStmToNextExpr pc vXlist labImpStm
---         [] 
---             ->  impSimpStmToNextExpr pc vXlist (LsimpleStm (entryLab,Sskip,exitLab))
--- --
--- impCompStmToNextExpr :: SmvId->[SmvId]->LimpStm -> NextExpr
--- -- Transform a labeled Imp statement to a nuXmv nextExpression.
--- -- Constraints describeb by Clarke et al., C(...), are represented by next-expression of nuXmv.
--- -- See Clarke et al., Model Checking, pp. 21-22.
--- impCompStmToNextExpr pc vXlist labImpStm = 
---     case labImpStm of
---         -- Labeled Simple statements:
---         LsimpleStm stm 
---                 ->  impSimpStmToNextExpr pc vXlist (LsimpleStm stm)
---         -- Labeled sequential composition:
---         LseqCompos (l,(labP1,labP2),l')
---                 ->  if l /= l1 || l1' /= l'' || l2' /= l'
---                        then error $ "impCompStmToNextExpr: wrong labels f P1;P2: " 
---                                     ++ show (labP1,labP2)
---                        else labC1nextExpr `NEor` labC2nextExpr
---                     where
---                     (l1,l1')    = labelsOfLabStm labP1
---                     (l'',l2')   = labelsOfLabStm labP2
---                     labC1nextExpr = impCompStmToNextExpr pc vXlist labP1
---                     labC2nextExpr = impCompStmToNextExpr pc vXlist labP2
---         -- Labeled sequential-statement blocks:
---         LseqStmBlok (l,labImpStmList,l') 
---                 -> labSeqStmListToNextExpr pc vXlist (l, labImpStmList, l')
---         -- Labeled if b then labP1 else labP2:
---         LifThenElse (l, (b, labP1, labP2), l') -- Clarke p.22 C(l, if b then l1:P1 else l2:P2, l’)
---             -> f1 `NEor` f2 `NEor` f3 `NEor` f4
---             where
---             l1  = entryLabelOf labP1
---             (l2,_) = labelsOfLabStm labP2
---             f1  = -- (pc=l & pc'=l1 & b & same(V))
---                 (pcVar `NEeq` (NEint l))        -- pc=l
---                 `NEand`                         -- and
---                 (pcNext `NEeq` (NEint l1))      -- next(pc)=l1
---                 `NEand`                         -- and
---                 (bExpToNextExpr b)              -- b
---                 `NEand`                         -- and
---                 (keepVars vXlist)               -- keepVars (vXlist)
---             f2  = -- (pc=l & pc'=l2 & ¬b & same(V))
---                 (pcVar `NEeq` (NEint l))        -- pc=l
---                 `NEand`                         -- and
---                 (pcNext `NEeq` (NEint l2))      -- next(pc)=l2
---                 `NEand`                         -- and
---                 (NEnot (bExpToNextExpr b))      -- not(b)
---                 `NEand`                         -- and
---                 (keepVars vXlist)               -- keepVars (vXlist)
---             labP1'   = setExitLabelOf labP1 l'  -- (l1,S1,_) --> (l1,S1,l’)
---             labP2'   = setExitLabelOf labP2 l'  -- (l2,S2,_) --> (l2,S2,l’)
---             f3      = impCompStmToNextExpr pc vXlist labP1'    -- C(l1,S1,l’)
---             f4      = impCompStmToNextExpr pc vXlist labP2'    -- C(l2,S2,l’)
---         -- Labeled while b do labP1:
---         LwhileStm   (l, (b, labP1), l') -- Clarke p.22 C(l, while b do l1:P1 end while, l')
---                 -> f1 `NEor` f2 `NEor` f3   
---                 where
---                 l1      = entryLabelOf labP1
---                 labP1'  = setExitLabelOf labP1 l    -- P1 = P1 with l as the exit label.
---                 f1  = -- (pc=l & pc'=l1 & b & same(V))
---                     (pcVar `NEeq` (NEint l))            -- pc=l
---                     `NEand`                             -- and
---                     (pcNext `NEeq` (NEint l1))          -- next(pc)=l1
---                     `NEand`                             -- and
---                     (bExpToNextExpr b)                  -- b
---                     `NEand`                             -- and
---                     (keepVars vXlist)                   -- keepVars (vXlist)
---                 f2 = -- (pc=l & pc'=l' & ¬b & same(V))
---                     (pcVar `NEeq` (NEint l))            -- pc=l
---                     `NEand`                             -- and
---                     (pcNext `NEeq` (NEint l'))          -- next(pc)=l'
---                     `NEand`                             -- and
---                     (NEnot (bExpToNextExpr b))          -- ¬ b
---                     `NEand`                             -- and
---                     (keepVars vXlist)                   -- keepVars (vXlist)
---                 f3 = -- C(l1,P1,l) 
---                     impCompStmToNextExpr pc vXlist labP1'
---     where
---     pcVar   = (NEvar pc)
---     pcNext  = (NEnext (SEvar pc))
---
---
------------------------------------------------------------------------------------------
--- --
