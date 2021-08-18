@@ -12,7 +12,8 @@ where
 --
 -------------------------------------------------------------------------------
 --
-import GlobalTypes (VarId, EntryLabel)
+import GlobalTypes
+    (VarId, EntryLabel(..), ExitLabel(..))
 --     (EntryLabel, ExitLabel) --(VarMN) -- Value(..)
 --import GlobalFunctions ()
 --import ImpExpSyntax (ExpAB(..), ArthE(..), BoolE(..))
@@ -33,31 +34,23 @@ import ImpLabStmSyntax
 import LimpSimpStmToNuXmv
     (impSimpStmToNextExpr
     ,keepVars) -- ,curr,next,pcX
-import ImpLabProgSyntax (ProgPC(..), Lprog(..), LimpProg(..))
-import LimpProgToNuXmv (impTypeToXmvType, impVarDeclToXmvVarDecl, labStmToXmvConstraint) -- lImpProgToNuXmv
-
-import ConcLabProgSyntax
-import Data.List 
-
+import ImpLabProgSyntax (ProgPC(..), Lprog(..))
 import ImpProgSyntax
     (Prog(..),ImpProg,ProgVarList(..),ImpVarType(..))
+import LimpProgToNuXmv (impTypeToXmvType, impVarDeclToXmvVarDecl) -- lImpProgToNuXmv
+--
+import ConcLabProgSyntax
+
+import Data.List 
 --
 -------------------------------------------------------------------------------
 --
-
-
 
 pciList :: [Lprog s] -> [VarId]
 -- Extracts a list of pc-Ids from a list of labeled Imp programs.
 --pciList labProgList = [pcId | Lprog (_, _, ProgPC (pcId,pcT), _) <- labProgList]
 pciList labProgList = [pcId | Lprog (_, _, ProgPC (pcId,_), _) <- labProgList]
 --
-
-progPcList :: [Lprog s] -> [ProgPC]
-progPcList labProgList = [pc | Lprog (_, _, pc, _) <- labProgList]
-
-
-
 
 initialStatesOf :: LconcProg s -> SimpleExpr
 -- Given a labeled concurrent program 
@@ -100,11 +93,12 @@ concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,pcT), i, labProcList, p
     moduleParams    = [] -- Falta agregar a la sintaxis de Imp-programs: parametros del programa XXX
 --     moduleElemList  = [pVarDecl, pcDecl, pInitConstr, pTransConstr]
     moduleElemList  = [pcDecl, pVarDecl, pInitConstr, pTransConstr]
+--     pVarDecl        = impVarDeclToXmvVarDecl lVarDecl
     pVarDecl        = impVarDeclToXmvVarDecl (progVarListUnion [(lVarDecl)| Lprog (_, lVarDecl, _, _) <- labProcList])
 --     (entryLab,_)    = labelsOfLabStm labStm
-    pcDecl          = VarDecl (union [(pcId, impTypeToXmvType pcT)] [(pci, impTypeToXmvType pcTi)|ProgPC (pci,pcTi) <- progPcList labProcList]) 
+    pcDecl          = VarDecl (union [(pcId, impTypeToXmvType pcT)] [(pci, impTypeToXmvType pcT)|pci <- pciList labProcList]) 
     pInitConstr     = InitConstr  (initialStatesOf concP)  -- INIT pc=entryLab
-    pTransConstr    = TransConstr (labConcProgConstraint i pcId labProcList)
+    pTransConstr    = TransConstr (constraint pcId i labProcList pcIdleValue)
 --     pTransConstr    = TransConstr (labStmToXmvConstraint pcId lVarDecl labStm)
     -- Module main (moduleName,moduleParameters,moduleElemList):
     mainModule      = (mainName,mainParams,mainElemList) -- XXXX
@@ -118,10 +112,12 @@ concLabProgToNuXmv concP@(LconcProg (pName, ProgPC (pcId,pcT), i, labProcList, p
     mainTransConstr = TransConstr NEtrue    -- True means no constraints
     -- ltlModule    = ...
     --
+    -- C(l, cobegin l1:P1: l1' || ... || ln:Pn:ln' coend, l')
 --
 
-
--- union of ProgVarList List
+------------------------------------
+---
+------------------------------------
 progVarListUnionAux :: [ProgVarList] -> [(VarId,ImpVarType)] 
 progVarListUnionAux l = 
     case l of
@@ -131,68 +127,44 @@ progVarListUnionAux l =
 progVarListUnion :: [ProgVarList] -> ProgVarList
 progVarListUnion l = ProgVarList (progVarListUnionAux l)
 
-varIdListFromProgVarList :: ProgVarList -> [VarId]
-varIdListFromProgVarList (ProgVarList l) = 
-    case l of
-        [] -> []
-        ((varId,_)):xs -> union [varId] (varIdListFromProgVarList (ProgVarList xs))
+nePciList :: [Lprog s] -> [NextExpr]
+nePciList labProgList = [NEvar pc | Lprog (_, _, ProgPC (pc,_), _) <- labProgList]
 
+nextPciList :: [Lprog s] -> [NextExpr]
+nextPciList labProgList = [NEnext (SEvar pc) | Lprog (_, _, ProgPC (pc,_), _) <- labProgList]
 
--- constrains
+entryLabelList :: [Lprog s] -> [NextExpr]
+entryLabelList labProgList = [NEint l | Lprog (_, _, _, LseqCompos (l, _, _)) <- labProgList]
 
-f1Aux :: [LimpProg] -> NextExpr
-f1Aux l =
-    case l of
-        [] -> NEtrue
-        (Lprog (_, _, ProgPC (pcId,_), LseqCompos (i,(_,_),_))):xs -> ((NEnext (SEvar pcId)) `NEeq` (NEint i)) 
-                                                                   `NEand` 
-                                                                    (f1Aux xs)
+exitLabelList :: [Lprog s] -> [NextExpr]
+exitLabelList labProgList = [NEint l | Lprog (_, _, _, LseqCompos (_, _, l)) <- labProgList]
 
-f2Aux1 :: [LimpProg] -> NextExpr
-f2Aux1 l =
-    case l of
-        [] -> NEtrue
-        (Lprog (_, _, ProgPC (pcId,_), _)):xs -> ((NEvar pcId) `NEeq` (NEint 0)) 
-                                                `NEand` 
-                                                (f2Aux1 xs)
+neqListToNexpr :: [NextExpr] -> [NextExpr] -> NextExpr
+neqListToNexpr l1 [] = NEtrue
+neqListToNexpr [] l2 = NEtrue
+neqListToNexpr l1 l2 = ((head l1) `NEeq` (head l2)) `NEand` (neqListToNexpr (tail l1) (tail l2))
 
-f2Aux2 :: [LimpProg] -> NextExpr
-f2Aux2 l =
-    case l of
-        [] -> NEtrue
-        (Lprog (_, _, ProgPC (pcId,_), _)):xs -> ((NEnext (SEvar pcId)) `NEeq` (NEint 0)) 
-                                                `NEand` 
-                                                (f2Aux2 xs)
+allBottom :: [NextExpr] -> NextExpr
+allBottom [] = NEtrue
+allBottom l = ((head l) `NEeq` (NEint 0)) `NEand` (allBottom (tail l))
 
-f3Aux :: [LimpProg] -> [VarId] -> [VarId] -> NextExpr
-f3Aux l variables pcs =
-    case l of
-        [] -> NEfalse
-        (Lprog (_, lVarDecl, ProgPC (pcId,_), labStm)):xs -> ((labStmToXmvConstraint pcId lVarDecl labStm)
-                                                            `NEand` 
-                                                            (keepVars (variables \\ (varIdListFromProgVarList lVarDecl))) 
-                                                            `NEand` 
-                                                            (keepVars (pcs \\ [pcId])) 
-                                                            )
-                                                            `NEor` 
-                                                            (f3Aux xs variables pcs)
-labConcProgConstraint :: EntryLabel -> VarId -> [LimpProg] -> NextExpr
-labConcProgConstraint i pcId labProcList  = f1 `NEor` f2 `NEor` f3 
+constraint :: SmvId -> EntryLabel -> [Lprog s] -> ExitLabel -> NextExpr
+constraint pc l0 labProgList lf = 
+    f1 `NEor` f2 --`NEor` f3
     where
-    f1 = ((NEvar pcId) `NEeq` (NEint i)) 
-        `NEand` 
-        (f1Aux labProcList)
-        `NEand` 
-        ((NEnext (SEvar pcId)) `NEeq` (NEint 0))  
-    f2 = ((NEvar pcId) `NEeq` (NEint 0)) 
-        `NEand` 
-        (f2Aux1 labProcList)
-        `NEand` 
-        ((NEnext (SEvar pcId)) `NEeq` (NEint 0)) 
-        `NEand` 
-        (f2Aux2 labProcList)
-    f3 = (f3Aux labProcList (varIdListFromProgVarList (progVarListUnion [(lVarDecl)| Lprog (_, lVarDecl, _, _) <- labProcList])) (pciList labProcList))
-
-                                            
-
-
+    -- (pc = l) ^ (pc1' = l1) ^ ... ^ (pcn' = ln) ^ (pc' = bottom)                         -- //////////////////////////
+    f1 = ((NEvar pc) `NEeq` (NEint l0))                                                    -- pc = l
+         `NEand`                                                                           -- and
+         (neqListToNexpr (nextPciList labProgList) (entryLabelList labProgList))           -- next(pci) = li for all i
+         `NEand`                                                                           -- and
+         ((NEnext (SEvar pc)) `NEeq` (NEint 0))                                            -- next(pc) = bottom
+    -- (pc = bottom) ^ (pc1 = l1') ^ ... ^ (pcn = ln') ^ (pc' = l') ^ CONJ(pci' = bottom)  -- //////////////////////////
+    f2 = ((NEvar pc) `NEeq` (NEint 0))                                                     -- pc = bottom
+         `NEand`                                                                           -- and
+         (neqListToNexpr (nePciList labProgList) (exitLabelList labProgList))              -- pci = next(li) for all i
+         `NEand`                                                                           -- and
+         ((NEnext (SEvar pc)) `NEeq` (NEint lf))                                           -- next(pc) = next(l)
+         `NEand`                                                                           -- and
+         (allBottom (nextPciList labProgList))                                             -- CONJ(next(pci) = bottom)
+    --                                                                                     -- //////////////////////////
+    -- f3 = NEtrue     
