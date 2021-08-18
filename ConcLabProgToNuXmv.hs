@@ -34,8 +34,8 @@ import LimpSimpStmToNuXmv
     (impSimpStmToNextExpr
     ,keepVars) -- ,curr,next,pcX
 import ImpLabProgSyntax (ProgPC(..), Lprog(..), LimpProg(..))
-import LimpProgToNuXmv (impTypeToXmvType, impVarDeclToXmvVarDecl) -- lImpProgToNuXmv
---
+import LimpProgToNuXmv (impTypeToXmvType, impVarDeclToXmvVarDecl, labStmToXmvConstraint) -- lImpProgToNuXmv
+
 import ConcLabProgSyntax
 import Data.List 
 
@@ -45,6 +45,8 @@ import ImpProgSyntax
 -------------------------------------------------------------------------------
 --
 
+
+
 pciList :: [Lprog s] -> [VarId]
 -- Extracts a list of pc-Ids from a list of labeled Imp programs.
 --pciList labProgList = [pcId | Lprog (_, _, ProgPC (pcId,pcT), _) <- labProgList]
@@ -53,6 +55,8 @@ pciList labProgList = [pcId | Lprog (_, _, ProgPC (pcId,_), _) <- labProgList]
 
 progPcList :: [Lprog s] -> [ProgPC]
 progPcList labProgList = [pc | Lprog (_, _, pc, _) <- labProgList]
+
+
 
 
 initialStatesOf :: LconcProg s -> SimpleExpr
@@ -127,6 +131,12 @@ progVarListUnionAux l =
 progVarListUnion :: [ProgVarList] -> ProgVarList
 progVarListUnion l = ProgVarList (progVarListUnionAux l)
 
+varIdListFromProgVarList :: ProgVarList -> [VarId]
+varIdListFromProgVarList (ProgVarList l) = 
+    case l of
+        [] -> []
+        ((varId,_)):xs -> union [varId] (varIdListFromProgVarList (ProgVarList xs))
+
 
 -- constrains
 
@@ -154,8 +164,20 @@ f2Aux2 l =
                                                 `NEand` 
                                                 (f2Aux2 xs)
 
+f3Aux :: [LimpProg] -> [VarId] -> [VarId] -> NextExpr
+f3Aux l variables pcs =
+    case l of
+        [] -> NEfalse
+        (Lprog (_, lVarDecl, ProgPC (pcId,_), labStm)):xs -> ((labStmToXmvConstraint pcId lVarDecl labStm)
+                                                            `NEand` 
+                                                            (keepVars (variables \\ (varIdListFromProgVarList lVarDecl))) 
+                                                            `NEand` 
+                                                            (keepVars (pcs \\ [pcId])) 
+                                                            )
+                                                            `NEor` 
+                                                            (f3Aux xs variables pcs)
 labConcProgConstraint :: EntryLabel -> VarId -> [LimpProg] -> NextExpr
-labConcProgConstraint i pcId labProcList  = f1 `NEor` f2 
+labConcProgConstraint i pcId labProcList  = f1 `NEor` f2 `NEor` f3 
     where
     f1 = ((NEvar pcId) `NEeq` (NEint i)) 
         `NEand` 
@@ -169,6 +191,7 @@ labConcProgConstraint i pcId labProcList  = f1 `NEor` f2
         ((NEnext (SEvar pcId)) `NEeq` (NEint 0)) 
         `NEand` 
         (f2Aux2 labProcList)
+    f3 = (f3Aux labProcList (varIdListFromProgVarList (progVarListUnion [(lVarDecl)| Lprog (_, lVarDecl, _, _) <- labProcList])) (pciList labProcList))
 
                                             
 

@@ -16,8 +16,15 @@ INIT
 ((TRUE & (pc = 1)) & ((pc1 = 0) & (pc2 = 0)))
 
 TRANS
-((((pc = 1) & ((next(pc1) = 1) & ((next(pc2) = 1) & TRUE))) & (next(pc) = 0))
+(((((pc = 1) & ((next(pc1) = 1) & ((next(pc2) = 1) & TRUE))) & (next(pc) = 0))
  | ((((pc = 0) & ((pc1 = 0) & ((pc2 = 0) & TRUE))) & (next(pc) = 0)) & ((next(pc1) = 0) & ((next(pc2) = 0) & TRUE))))
+ | (((((((((pc1 = 1) & (next(pc1) = 2)) & (next(x) = 1)) & TRUE)
+ | ((((pc1 = 2) & (next(pc1) = 0)) & (next(x) = 2)) & TRUE))
+ | (((pc1 = 0) & (next(pc1) = 0)) & (next(x) = x))) & (next(y) = y)) & (next(pc2) = pc2))
+ | (((((((((pc2 = 1) & (next(pc2) = 2)) & (next(y) = 1)) & TRUE)
+ | ((((pc2 = 2) & (next(pc2) = 0)) & (next(y) = 2)) & TRUE))
+ | (((pc2 = 0) & (next(pc2) = 0)) & (next(y) = y))) & (next(x) = x)) & (next(pc1) = pc1))
+ | FALSE)))
 
 -- End module concProg1.
 --------------------------------------------------------------------------------
